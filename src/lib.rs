@@ -1,13 +1,20 @@
 
 use core::f32;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, window::WindowResolution};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
 pub fn start() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                resolution: WindowResolution::new(900.0, 800.0),
+                title: "Minesweeper".to_string(),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_systems(Startup, setup)
         .add_systems(Update, (rotate_cube, move_cube))
         .run();
