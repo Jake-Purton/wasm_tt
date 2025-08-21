@@ -1,5 +1,0 @@
-[build]
-release = true
-
-[tools]
-wasm_opt = "none"   # skip wasm-opt in dev
