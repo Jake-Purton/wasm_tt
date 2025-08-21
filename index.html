@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Rust WASM Button Example</title>
+</head>
+<body>
+  <h1>Hello from Rust + WASM</h1>
+  <canvas id="bevy-canvas"></canvas>
+<textarea id="rust-textarea" rows="4" cols="50"></textarea>
+<script>
+    document.getElementById('rust-textarea').addEventListener('input', function(e) {
+        if (window.wasm_bindgen && typeof window.wasm_bindgen.set_textbox_value === 'function') {
+            window.wasm_bindgen.set_textbox_value(e.target.value);
+        }
+    });
+</script>
+
+  <script type="module">
+    import init, * as wasm_bindgen from "./wasm_towertech.js";
+    init().then(() => {
+      window.wasm_bindgen = wasm_bindgen;
+    });
+  </script>
+</body>
+</html>

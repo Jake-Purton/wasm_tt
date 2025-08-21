@@ -28,7 +28,7 @@ pub fn set_textbox_value(val: String) {
 
 pub fn main() {
 
-    console_log!("hello jakey");
+    console_log!("hello chris");
 
     App::new()
         .add_plugins(
@@ -48,7 +48,7 @@ pub fn main() {
         .insert_resource(Board::new())
         .insert_resource(OpponentBoard::new())
         .add_systems(Startup, setup)
-        .add_systems(Update, (click_cell, update_cells))
+        .add_systems(Update, (click_cell, update_cells, update_debug))
         .run();
 }
 
