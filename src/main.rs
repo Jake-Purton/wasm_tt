@@ -48,7 +48,7 @@ pub fn main() {
         .insert_resource(Board::new())
         .insert_resource(OpponentBoard::new())
         .add_systems(Startup, setup)
-        .add_systems(Update, (click_cell, update_cells, update_debug))
+        .add_systems(Update, (click_cell, update_cells, update_debug, update_opponent_cells))
         .run();
 }
 
@@ -70,13 +70,42 @@ struct Cell {
 #[derive(Resource)]
 struct OpponentBoard {
     board: [[u8; BOARD_H]; BOARD_W],
-    bombs: u8,
+    // bombs: u8,
 }
 
 impl OpponentBoard {
     pub fn new() -> Self {
         let board: [[u8; 16]; 16] = [[0; BOARD_H]; BOARD_W];
-        Self { board, bombs: 0 }
+        Self { board, /*bombs: 0*/ }
+    }
+
+    fn get_text (&self, x: usize, y: usize) -> String {
+        if self.board[x][y] & 0b0001_0000 > 0 {
+            if self.board[x][y] & 0b0000_1111 > 0 {
+                return (self.board[x][y] & 0b0000_1111).to_string();
+            }
+        }
+
+        return "".into();
+    }
+
+    fn get_colour (&self, x: usize, y: usize) -> Color {
+
+        let mut offset = -0.1;
+
+        if (x + y) % 2 == 0 {
+            offset = 0.1
+        }
+
+        if self.board[x][y] & 0b0001_0000 > 0 {
+            if self.board[x][y] & 0b0010_0000 > 0 {
+                return Color::srgb(0.9 + offset, 0.3 + offset, 0.3 + offset)
+            }
+
+            return Color::srgb(0.5 + offset , 0.3 + offset , 0.6 + offset)
+        }
+
+        return Color::srgb(0.6 + offset , 0.4 + offset , 0.4 + offset)
     }
 }
 
@@ -283,6 +312,27 @@ fn update_cells (
     children_query: Query<&Children>,
     mut cells: Query<(Entity, &mut Sprite, &Cell)>,
     board: Res<Board>
+) {
+
+    for (e, mut sprite, cell) in cells.iter_mut() {
+        
+        if let Ok(children) = children_query.get(e) {
+            for &child in children {
+                if let Ok(mut text) = text_query.get_mut(child) {
+                    text.0 = board.get_text(cell.x, cell.y); // example
+                }
+            }
+        }
+
+        sprite.color = board.get_colour(cell.x, cell.y)
+    }
+}
+
+fn update_opponent_cells (
+    mut text_query: Query<&mut Text2d>,
+    children_query: Query<&Children>,
+    mut cells: Query<(Entity, &mut Sprite, &OpponentCell)>,
+    board: Res<OpponentBoard>
 ) {
 
     for (e, mut sprite, cell) in cells.iter_mut() {
