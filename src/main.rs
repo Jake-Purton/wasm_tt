@@ -10,6 +10,46 @@ use bevy::{
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use wasm_bindgen::prelude::*;
 use std::sync::Mutex;
+use web_sys::{WebSocket, MessageEvent, Blob};
+
+#[wasm_bindgen]
+pub fn send_ws_message() {
+    use std::rc::Rc;
+
+    let ws = Rc::new(WebSocket::new("ws://localhost:9001/").unwrap());
+
+    // Send a message after the connection opens
+    let ws_onopen = ws.clone();
+    let onopen = Closure::wrap(Box::new(move |_: JsValue| {
+        ws_onopen.send_with_u8_array(&[0,0,0,1]).unwrap();
+        ws_onopen.send_with_str("Hello from WASM!").unwrap();
+    }) as Box<dyn FnMut(JsValue)>);
+
+    ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+    onopen.forget();
+
+    let ws_onmessage = ws.clone();
+    let onmessage = Closure::wrap(Box::new(move |e: MessageEvent| {
+        let data = e.data();
+
+        console_log!("{:?}", data);
+
+        if let Ok(txt) = data.clone().dyn_into::<js_sys::JsString>() {
+            // Text message
+            console_log!("{}", txt);
+        } else if let Ok(blob) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
+            let array = js_sys::Uint8Array::new(&blob);
+            let mut body = vec![0; array.length() as usize];
+            array.copy_to(&mut body[..]);
+            web_sys::console::log_1(&format!("Got binary: {:?}", body).into());
+        } else {
+            console_log!("No message what")
+        }
+    }) as Box<dyn FnMut(_)>);
+
+    ws_onmessage.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+    onmessage.forget();
+}
 
 const BOMB_COUNT: u32 = 40;
 const BOARD_W: usize = 16;
@@ -29,6 +69,8 @@ pub fn set_textbox_value(val: String) {
 pub fn main() {
 
     console_log!("hello chris");
+
+    send_ws_message();
 
     App::new()
         .add_plugins(
