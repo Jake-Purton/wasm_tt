@@ -1,7 +1,6 @@
 use bevy::prelude::*;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
 
-use crate::{BOARD_H, BOARD_W, BOMB_COUNT};
+use crate::{console_log, BOARD_H, BOARD_W};
 
 #[derive(Component)]
 pub struct OpponentCell {
@@ -60,7 +59,8 @@ impl OpponentBoard {
 // the local board
 #[derive(Resource)]
 pub struct Board {
-    board: [[u8; BOARD_H]; BOARD_W],
+    board: Option<[[u8; BOARD_H]; BOARD_W]>,
+    pub locked: bool,
     bombs: u8,
     // 00X0_XXXX = not yet clicked
     // 00X1_XXXX = already discovered
@@ -70,26 +70,18 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new() -> Self {
+    pub fn start (&mut self, bombs: Vec<u8>) {
+        console_log!("Board starting");
+
         let mut board: [[u8; 16]; 16] = [[0; BOARD_H]; BOARD_W];
-        let mut vec: Vec<(usize, usize)> = Vec::new();
+        let vec: Vec<(usize, usize)> = bombs
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0] as usize, chunk[1] as usize))
+            .collect();
 
-        for x in 0..BOARD_W {
-            for y in 0..BOARD_H {
-                vec.push((x, y));
-            }
-        }
 
-        let mut rng = SmallRng::from_entropy();
-
-        for _ in 0..BOMB_COUNT {
-            let i = rng.gen_range(0..vec.len());
-
-            let (x, y) = vec[i];
-
-            board[x][y] = 0b0010_0000;
-
-            vec.remove(i);
+        for i in vec {
+            board[i.0][i.1] = 0b0010_0000;
         }
 
         for x in 0..BOARD_W {
@@ -114,14 +106,46 @@ impl Board {
                 board[x][y] += bomb_count as u8;
             }
         }
+        // Pretty print the board
+        for y in 0..BOARD_H {
+            let mut row = String::new();
+            for x in 0..BOARD_W {
+            let cell = board[x][y];
+            let ch = if cell & 0b0010_0000 > 0 {
+                'B' // Bomb
+            } else {
+                let num = cell & 0b0000_1111;
+                if num > 0 {
+                std::char::from_digit(num as u32, 10).unwrap_or(' ')
+                } else {
+                '.' // Discovered empty
+                }
+            };
 
-        Self { board, bombs: 0 }
+            row.push(ch);
+            row.push(' ');
+            }
+            console_log!("{}", row);
+        }
+
+        self.board = Some(board);
+    }
+
+    pub fn is_locked(&self) -> bool {
+        return self.locked;
+    }
+
+    pub fn new() -> Self {
+        Self { board: None, bombs: 0, locked: true }
     }
 
     pub fn get_text (&self, x: usize, y: usize) -> String {
-        if self.board[x][y] & 0b0001_0000 > 0 {
-            if self.board[x][y] & 0b0000_1111 > 0 {
-                return (self.board[x][y] & 0b0000_1111).to_string();
+
+        if let Some(board) = self.board {
+            if board[x][y] & 0b0001_0000 > 0 {
+                if board[x][y] & 0b0000_1111 > 0 {
+                    return (board[x][y] & 0b0000_1111).to_string();
+                }
             }
         }
 
@@ -129,33 +153,38 @@ impl Board {
     }
 
     pub fn discover (&mut self, x: usize, y: usize) {
+
+        let board = match self.board.as_mut() {
+            Some(b) => b,
+            None => {
+                console_log!("SOMETHING WRONG BOARD IS NONE");
+                return;
+            }
+        };
         
         // if already discovered ignore
-        if self.board[x][y] & 0b0001_0000 > 0 {
+        if board[x][y] & 0b0001_0000 > 0 {
             return;
         }
-        
+
         // if it is a bomb increase the bomb count
-        if self.board[x][y] & 0b0010_0000 > 0 {
+        if board[x][y] & 0b0010_0000 > 0 {
             self.bombs += 1;
         }
-        
-        self.board[x][y] |= 0b0001_0000; // mark as discovered
 
-        if self.board[x][y] & 0b0000_1111 == 0 {
+        board[x][y] |= 0b0001_0000; // mark as discovered
+
+        if board[x][y] & 0b0000_1111 == 0 {
             // discover all the cells around it too
-
             let x = x as isize;
             let y = y as isize;
 
             for i in x-1..=x+1 {
                 for j in y-1..=y+1 {
-                    if i < 0 || j < 0 || i >= BOARD_W as isize|| j >= BOARD_H as isize {
+                    if i < 0 || j < 0 || i >= BOARD_W as isize || j >= BOARD_H as isize {
                         continue;
                     }
-
                     self.discover(i as usize, j as usize);
-                    
                 }
             }
         }
@@ -170,12 +199,14 @@ impl Board {
             offset = 0.1
         }
 
-        if self.board[x][y] & 0b0001_0000 > 0 {
-            if self.board[x][y] & 0b0010_0000 > 0 {
-                return Color::srgb(0.9 + offset, 0.3 + offset, 0.3 + offset)
+        if let Some(board) = self.board {
+            if board[x][y] & 0b0001_0000 > 0 {
+                if board[x][y] & 0b0010_0000 > 0 {
+                    return Color::srgb(0.9 + offset, 0.3 + offset, 0.3 + offset)
+                }
+    
+                return Color::srgb(0.5 + offset , 0.3 + offset , 0.6 + offset)
             }
-
-            return Color::srgb(0.5 + offset , 0.3 + offset , 0.6 + offset)
         }
 
         return Color::srgb(0.3 + offset , 0.7 + offset , 0.4 + offset)

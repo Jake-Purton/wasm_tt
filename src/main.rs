@@ -14,7 +14,6 @@ use std::sync::Mutex;
 
 use crate::{boards::{Board, Cell, OpponentBoard, OpponentCell}, websocket::WebSocketPlugin};
 
-const BOMB_COUNT: u32 = 40;
 const BOARD_W: usize = 16;
 const BOARD_H: usize = 16;
 const PIXELS_PER_CELL: usize = 50;
@@ -28,9 +27,6 @@ pub fn set_textbox_value(val: String) {
     console_log!("{}", val);
     *TEXT_VALUE.lock().unwrap() = Some(val.clone());
 }
-
-#[derive(Resource)]
-pub struct BoardLocked(bool);
 
 pub fn main() {
 
@@ -52,9 +48,7 @@ pub fn main() {
                 }),
             WebSocketPlugin,
         ))
-        .insert_resource(Board::new())
         .insert_resource(OpponentBoard::new())
-        .insert_resource(BoardLocked(true))
         .add_systems(Startup, setup)
         .add_systems(Update, (click_cell, update_cells, update_debug, update_opponent_cells))
         .run();
@@ -183,10 +177,9 @@ fn click_cell(
     windows: Query<&Window>,
     mut query: Query<(&Sprite, &Transform, &Cell)>,
     mut board: ResMut<Board>,
-    locked_board: Res<BoardLocked>,
 ) {
 
-    if locked_board.0 {
+    if board.is_locked() {
         return;
     }
 

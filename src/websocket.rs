@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use web_sys::{WebSocket, MessageEvent, Blob, FileReader, ProgressEvent};
 use wasm_bindgen::prelude::*;
 
-use crate::{console_log, BoardLocked};
+use crate::{boards::Board, console_log};
 
 static MESSAGE_QUEUE: Mutex<VecDeque<QueueItem>> = Mutex::new(VecDeque::new());
 
@@ -17,20 +17,21 @@ pub struct WebSocketPlugin;
 
 impl Plugin for WebSocketPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_variables);
+        app.insert_resource(Board::new())
+            .add_systems(Update, update_variables);
     }
 }
 
 fn update_variables (
-    mut locked_board: ResMut<BoardLocked>,
+    mut board: ResMut<Board>,
 ) {
 
     let mut q = MESSAGE_QUEUE.lock().unwrap();
 
     while let Some(a) = q.pop_front() {
         match a {
-            QueueItem::UnlockBoard => locked_board.0 = false,
-            QueueItem::Board(_) => (),
+            QueueItem::UnlockBoard => board.locked = false,
+            QueueItem::Board(bombs) => board.start(bombs),
         }
     }
 
@@ -45,11 +46,12 @@ fn read_blob(blob: Blob) {
         let uint8_array = js_sys::Uint8Array::new(&array_buffer);
         let mut vec: Vec<u8> = uint8_array.to_vec();
         // Now you have the bytes!
-        console_log!("Binary data: {:?}", vec);
+        // console_log!("Binary data: {:?}", vec);
 
         let mut q = MESSAGE_QUEUE.lock().unwrap();
 
         if let Some(player_pos) = vec.pop() {
+            console_log!("player position: {}", player_pos);
             if player_pos == 0 {
                 q.push_back(QueueItem::UnlockBoard);
             }
