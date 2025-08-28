@@ -12,7 +12,7 @@ use bevy::{
 use wasm_bindgen::prelude::*;
 use std::sync::Mutex;
 
-use crate::{boards::{Board, Cell, OpponentBoard, OpponentCell}, websocket::WebSocketPlugin};
+use crate::{boards::{Board, Cell, OpponentBoard, OpponentCell}, websocket::{WebSocketPlugin, OUTBOUND_QUEUE}};
 
 const BOARD_W: usize = 16;
 const BOARD_H: usize = 16;
@@ -204,7 +204,11 @@ fn click_cell(
             if (world_x - cell_pos.x).abs() < half_size
                 && (world_y - cell_pos.y).abs() < half_size
             {
-                board.discover(cell.x, cell.y)
+                board.discover(cell.x, cell.y);
+                match OUTBOUND_QUEUE.lock() {
+                    Ok(mut oq) => oq.push_back(vec![cell.x as u8, cell.y as u8]),
+                    Err(e) => console_log!("{e}"),
+                }
             }
         }
 

@@ -1,12 +1,18 @@
-use std::{collections::VecDeque, sync::Mutex};
+use std::{cell::RefCell, collections::VecDeque, sync::Mutex};
 
 use bevy::prelude::*;
 use web_sys::{WebSocket, MessageEvent, Blob, FileReader, ProgressEvent};
 use wasm_bindgen::prelude::*;
+use std::rc::Rc;
 
 use crate::{boards::Board, console_log};
 
 static MESSAGE_QUEUE: Mutex<VecDeque<QueueItem>> = Mutex::new(VecDeque::new());
+pub static OUTBOUND_QUEUE: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
+
+thread_local! {
+    static WS: Rc<RefCell<Option<WebSocket>>> = Rc::new(RefCell::new(None));
+}
 
 enum QueueItem {
     UnlockBoard,
@@ -66,7 +72,6 @@ fn read_blob(blob: Blob) {
 
 #[wasm_bindgen]
 pub fn init_ws() {
-    use std::rc::Rc;
 
     let ws = Rc::new(WebSocket::new("ws://localhost:9001/").unwrap());
 
@@ -99,4 +104,33 @@ pub fn init_ws() {
 
     ws_onmessage.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     onmessage.forget();
+
+    let ws_dequeue = ws.clone();
+    // Set up a timer to periodically flush queue
+    let cb = Closure::wrap(Box::new(move || {
+
+        match OUTBOUND_QUEUE.lock() {
+            Ok(mut q) => {
+                if let Some(message) = q.front() {
+                    match ws_dequeue.send_with_u8_array(message) {
+                        Ok(_) => {
+                            // success → pop it
+                            q.pop_front();
+                        }
+                        Err(err) => {
+                            // failed → leave it in queue
+                            console_log!("Send failed: {:?}", err);
+                        }
+                    }
+                }
+            },
+            Err(e) => console_log!("OUTBOUND QUEUE ERROR: {}", e),
+        }
+
+    }) as Box<dyn FnMut()>);
+    web_sys::window()
+        .unwrap()
+        .set_interval_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 50)
+        .unwrap();
+    cb.forget();
 }

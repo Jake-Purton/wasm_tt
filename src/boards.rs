@@ -23,7 +23,7 @@ pub struct OpponentBoard {
 impl OpponentBoard {
     pub fn new() -> Self {
         let board: [[u8; 16]; 16] = [[0; BOARD_H]; BOARD_W];
-        Self { board, /*bombs: 0*/ }
+        Self { board }
     }
 
     pub fn get_text (&self, x: usize, y: usize) -> String {
