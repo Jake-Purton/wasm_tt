@@ -1,0 +1,100 @@
+use std::{collections::VecDeque, sync::Mutex};
+
+use bevy::prelude::*;
+use web_sys::{WebSocket, MessageEvent, Blob, FileReader, ProgressEvent};
+use wasm_bindgen::prelude::*;
+
+use crate::{console_log, BoardLocked};
+
+static MESSAGE_QUEUE: Mutex<VecDeque<QueueItem>> = Mutex::new(VecDeque::new());
+
+enum QueueItem {
+    UnlockBoard,
+    Board(Vec<u8>)
+}
+
+pub struct WebSocketPlugin;
+
+impl Plugin for WebSocketPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, update_variables);
+    }
+}
+
+fn update_variables (
+    mut locked_board: ResMut<BoardLocked>,
+) {
+
+    let mut q = MESSAGE_QUEUE.lock().unwrap();
+
+    while let Some(a) = q.pop_front() {
+        match a {
+            QueueItem::UnlockBoard => locked_board.0 = false,
+            QueueItem::Board(_) => (),
+        }
+    }
+
+}
+
+fn read_blob(blob: Blob) {
+    let file_reader = FileReader::new().unwrap();
+    let fr_c = file_reader.clone();
+    let onloadend = Closure::wrap(Box::new(move |_ev: ProgressEvent| {
+        let array = fr_c.result().unwrap();
+        let array_buffer: js_sys::ArrayBuffer = array.dyn_into().unwrap();
+        let uint8_array = js_sys::Uint8Array::new(&array_buffer);
+        let mut vec: Vec<u8> = uint8_array.to_vec();
+        // Now you have the bytes!
+        console_log!("Binary data: {:?}", vec);
+
+        let mut q = MESSAGE_QUEUE.lock().unwrap();
+
+        if let Some(player_pos) = vec.pop() {
+            if player_pos == 0 {
+                q.push_back(QueueItem::UnlockBoard);
+            }
+        }
+        q.push_back(QueueItem::Board(vec));
+
+    }) as Box<dyn FnMut(_)>);
+    file_reader.set_onloadend(Some(onloadend.as_ref().unchecked_ref()));
+    file_reader.read_as_array_buffer(&blob).unwrap();
+    onloadend.forget();
+}
+
+#[wasm_bindgen]
+pub fn init_ws() {
+    use std::rc::Rc;
+
+    let ws = Rc::new(WebSocket::new("ws://localhost:9001/").unwrap());
+
+    // Send a message after the connection opens
+    let ws_onopen = ws.clone();
+    let onopen = Closure::wrap(Box::new(move |_: JsValue| {
+        ws_onopen.send_with_u8_array(&[0,0,0,1]).unwrap();
+        ws_onopen.send_with_str("Hello from WASM!").unwrap();
+    }) as Box<dyn FnMut(JsValue)>);
+
+    ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+    onopen.forget();
+
+    let ws_onmessage = ws.clone();
+    let onmessage = Closure::wrap(Box::new(move |e: MessageEvent| {
+        let data = e.data();
+
+        console_log!("{:?}", data);
+
+        if let Ok(txt) = data.clone().dyn_into::<js_sys::JsString>() {
+            // Text message
+            console_log!("{}", txt);
+        } else if let Ok(blob) = e.data().dyn_into::<Blob>() {
+            console_log!("got binary");
+            read_blob(blob);
+        } else {
+            console_log!("No message what")
+        }
+    }) as Box<dyn FnMut(_)>);
+
+    ws_onmessage.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+    onmessage.forget();
+}
