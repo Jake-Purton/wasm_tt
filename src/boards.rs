@@ -16,20 +16,95 @@ pub struct Cell {
 
 #[derive(Resource)]
 pub struct OpponentBoard {
-    board: [[u8; BOARD_H]; BOARD_W],
+    board: Option<[[u8; BOARD_H]; BOARD_W]>,
     // bombs: u8,
 }
 
 impl OpponentBoard {
     pub fn new() -> Self {
-        let board: [[u8; 16]; 16] = [[0; BOARD_H]; BOARD_W];
-        Self { board }
+        // let board: [[u8; 16]; 16] = [[0; BOARD_H]; BOARD_W];
+        Self { board: None }
+    }
+
+    pub fn discover (&mut self, x: usize, y: usize) {
+
+        let board = match self.board.as_mut() {
+            Some(b) => b,
+            None => {
+                console_log!("SOMETHING WRONG BOARD IS NONE");
+                return;
+            }
+        };
+        
+        // if already discovered ignore
+        if board[x][y] & 0b0001_0000 > 0 {
+            return;
+        }
+
+        board[x][y] |= 0b0001_0000; // mark as discovered
+
+        if board[x][y] & 0b0000_1111 == 0 {
+            // discover all the cells around it too
+            let x = x as isize;
+            let y = y as isize;
+
+            for i in x-1..=x+1 {
+                for j in y-1..=y+1 {
+                    if i < 0 || j < 0 || i >= BOARD_W as isize || j >= BOARD_H as isize {
+                        continue;
+                    }
+                    self.discover(i as usize, j as usize);
+                }
+            }
+        }
+
+    }
+
+    pub fn start (&mut self, bombs: Vec<u8>) {
+
+        let mut board: [[u8; 16]; 16] = [[0; BOARD_H]; BOARD_W];
+        let vec: Vec<(usize, usize)> = bombs
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0] as usize, chunk[1] as usize))
+            .collect();
+
+
+        for i in vec {
+            board[i.0][i.1] = 0b0010_0000;
+        }
+
+        for x in 0..BOARD_W {
+            for y in 0..BOARD_H {
+                let mut bomb_count = 0;
+                for dx in -1..=1 {
+                    for dy in -1..=1 {
+                        if dx == 0 && dy == 0 {
+                            continue;
+                        }
+                        let nx = x as isize + dx;
+                        let ny = y as isize + dy;
+                        if nx >= 0 && nx < BOARD_W as isize && ny >= 0 && ny < BOARD_H as isize {
+                            let possible_bomb = board[nx as usize][ny as usize];
+                            if (possible_bomb & 0b0010_0000) > 0 {
+                                bomb_count += 1;
+                            }
+                        }
+                    }
+                }
+
+                board[x][y] += bomb_count as u8;
+            }
+        }
+        self.board = Some(board);
     }
 
     pub fn get_text (&self, x: usize, y: usize) -> String {
-        if self.board[x][y] & 0b0001_0000 > 0 {
-            if self.board[x][y] & 0b0000_1111 > 0 {
-                return (self.board[x][y] & 0b0000_1111).to_string();
+
+        if let Some(board) = self.board {
+            if board[x][y] & 0b0001_0000 > 0 {
+                if board[x][y] & 0b0000_1111 > 0 {
+                    return (board[x][y] & 0b0000_1111).to_string();
+                }
             }
         }
 
@@ -44,13 +119,17 @@ impl OpponentBoard {
             offset = 0.1
         }
 
-        if self.board[x][y] & 0b0001_0000 > 0 {
-            if self.board[x][y] & 0b0010_0000 > 0 {
-                return Color::srgb(0.9 + offset, 0.3 + offset, 0.3 + offset)
+        if let Some(board) = self.board {
+            if board[x][y] & 0b0001_0000 > 0 {
+                if board[x][y] & 0b0010_0000 > 0 {
+                    return Color::srgb(0.9 + offset, 0.3 + offset, 0.3 + offset)
+                }
+    
+                return Color::srgb(0.5 + offset , 0.3 + offset , 0.6 + offset)
             }
-
-            return Color::srgb(0.5 + offset , 0.3 + offset , 0.6 + offset)
         }
+
+
 
         return Color::srgb(0.6 + offset , 0.4 + offset , 0.4 + offset)
     }

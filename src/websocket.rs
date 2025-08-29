@@ -5,7 +5,7 @@ use web_sys::{WebSocket, MessageEvent, Blob, FileReader, ProgressEvent};
 use wasm_bindgen::prelude::*;
 use std::rc::Rc;
 
-use crate::{boards::Board, console_log};
+use crate::{boards::{Board, OpponentBoard}, console_log};
 
 static MESSAGE_QUEUE: Mutex<VecDeque<QueueItem>> = Mutex::new(VecDeque::new());
 pub static OUTBOUND_QUEUE: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
@@ -16,7 +16,8 @@ thread_local! {
 
 enum QueueItem {
     UnlockBoard,
-    Board(Vec<u8>)
+    Boards(Vec<u8>, Vec<u8>),
+    Discover ( usize, usize )
 }
 
 pub struct WebSocketPlugin;
@@ -30,6 +31,7 @@ impl Plugin for WebSocketPlugin {
 
 fn update_variables (
     mut board: ResMut<Board>,
+    mut opp_board: ResMut<OpponentBoard>,
 ) {
 
     let mut q = MESSAGE_QUEUE.lock().unwrap();
@@ -37,7 +39,13 @@ fn update_variables (
     while let Some(a) = q.pop_front() {
         match a {
             QueueItem::UnlockBoard => board.locked = false,
-            QueueItem::Board(bombs) => board.start(bombs),
+            QueueItem::Boards(bombs, opp_bombs) => {
+                board.start(bombs);
+                opp_board.start(opp_bombs);
+            },
+            QueueItem::Discover(x, y) => {
+                opp_board.discover(x, y);
+            },
         }
     }
 
@@ -56,13 +64,25 @@ fn read_blob(blob: Blob) {
 
         let mut q = MESSAGE_QUEUE.lock().unwrap();
 
-        if let Some(player_pos) = vec.pop() {
-            console_log!("player position: {}", player_pos);
-            if player_pos == 0 {
-                q.push_back(QueueItem::UnlockBoard);
+        if vec.len() == 2 {
+            q.push_back(QueueItem::Discover(vec[0] as usize, vec[1] as usize));
+        } else if vec.len() == 161 {
+
+            if let Some(player_pos) = vec.pop() {
+                console_log!("player position: {}", player_pos);
+                if player_pos == 0 {
+                    q.push_back(QueueItem::UnlockBoard);
+                    q.push_back(QueueItem::Boards(vec[0..80].to_vec(), vec[80..160].to_vec()));
+                } else {
+                    q.push_back(QueueItem::Boards(vec[80..160].to_vec(), vec[0..80].to_vec()));
+                }
             }
+
+            
+        } else {
+            console_log!("HERE (unknown message) of len: {}\n{:?}", vec.len(), vec)
         }
-        q.push_back(QueueItem::Board(vec));
+
 
     }) as Box<dyn FnMut(_)>);
     file_reader.set_onloadend(Some(onloadend.as_ref().unchecked_ref()));

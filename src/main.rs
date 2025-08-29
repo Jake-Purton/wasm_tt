@@ -1,6 +1,7 @@
 mod debug;
 mod websocket;
 mod boards;
+mod messages;
 
 use websocket::init_ws;
 
