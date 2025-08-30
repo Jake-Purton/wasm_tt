@@ -45,6 +45,9 @@ fn update_variables (
             },
             QueueItem::Discover(x, y) => {
                 opp_board.discover(x, y);
+                if opp_board.is_bomb(x, y) {
+                    board.locked = false
+                }
             },
         }
     }

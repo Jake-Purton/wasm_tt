@@ -26,6 +26,10 @@ impl OpponentBoard {
         Self { board: None }
     }
 
+    pub fn is_bomb(&self, x:usize, y: usize) -> bool {
+        return (self.board.unwrap()[x][y] & 0b0010_0000) > 0;
+    }
+ 
     pub fn discover (&mut self, x: usize, y: usize) {
 
         let board = match self.board.as_mut() {
@@ -249,6 +253,7 @@ impl Board {
         // if it is a bomb increase the bomb count
         if board[x][y] & 0b0010_0000 > 0 {
             self.bombs += 1;
+            self.locked = true;
         }
 
         board[x][y] |= 0b0001_0000; // mark as discovered
